@@ -1,0 +1,30 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts",
+    "app/(tabs)/chatjsx.jsx",
+    "components/chatMessage.jsx",
+    "app/(auth)/signup.jsx",
+    "app/(tabs)/index.jsx",
+    "app/(auth)/signin.jsx",
+    "app/(auth)/resetPassword.jsx",
+    "app/(profile)/passwordManager.jsx",
+    "app/(auth)/forget.jsx",
+    "app/(tabs)/explore.jsx",
+    "app/_layout.jsx",
+    "app/(tabs)/chat.jsx",
+    "app/(tabs)/App.jsx",
+    "nativewind-env.d.ts"
+  ]
+}
