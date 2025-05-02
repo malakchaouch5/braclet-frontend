@@ -1,242 +1,265 @@
-import React, { useState, useContext, useEffect, useCallback } from 'react';
-import { View, FlatList, Text, StyleSheet, KeyboardAvoidingView, Platform, Alert } from 'react-native';
-import ChatMessage from '@/components/chatMessage';
-import MessageInput from '@/components/messageInput';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { AuthContext } from '../authContext';
-import { useRouter } from 'expo-router';
-import api from '../api';
-import axios from 'axios';
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  TextInput,
+  Text,
+  FlatList,
+  Alert,
+  StyleSheet,
+  Platform,
+  KeyboardAvoidingView,
+  TouchableOpacity,
+} from "react-native";
+import axios from "axios";
+import { Audio } from "expo-av";
+import { FontAwesome } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-const ChatPage = () => {
+const API_URL = "http://10.0.2.2:8080";
+
+export default function ChatPage() {
   const [messages, setMessages] = useState([]);
+  const [text, setText] = useState("");
+  const [recording, setRecording] = useState(null);
   const [isSending, setIsSending] = useState(false);
-  const { userToken, userData, isLoading } = useContext(AuthContext);
-  const router = useRouter();
-  const API_URL = 'http://10.0.2.2:8080/req';
-
-
-  const handleSendText = useCallback(async ({ content }) => {
-    if (!userData || !userData.email) {
-      Alert.alert("Error", "User information incomplete");
-      return;
-    }
-  
-    setIsSending(true);
-    
-    try {
-      // 1. Fetch braceletId
-      let braceletId = "0";
-      try {
-        const braceletResponse = await api.get(`/req/users/bracelet?email=${userData.email}`, {
-          headers: { 'Authorization': `Bearer ${userToken}` }
-        });
-        braceletId = braceletResponse.data?.braceletId || "0";
-        console.log('Fetched braceletId:', braceletId);
-      } catch (fetchError) {
-        console.error('Failed to fetch bracelet ID:', fetchError);
-        braceletId = "0";
-      }
-  
-      // 2. Validate braceletId
-      if (braceletId === "0") {
-        Alert.alert(
-          "Bracelet Not Linked",
-          "Please link a bracelet before sending messages",
-          [{ text: "OK" }]
-        );
-        setIsSending(false);
-        return;
-      }
-  
-      // 3. Prepare and send message
-      const newMessage = {
-        text: content,
-        vocal: '',
-        anomalyDetected: false,
-        type: 'TEXT',
-        isTextMessage: true,
-        braceletId: Number(braceletId),
-        senderUserId: userData.id,
-      };
-  
-      // Create temporary message
-      const tempMessage = {
-        ...newMessage,
-        id: `temp-${Date.now()}`,
-        createdAt: new Date().toISOString(),
-        isTemp: true
-      };
-      setMessages(prev => [tempMessage, ...prev]);
-  
-      // Send to server
-      const response = await api.post('/messages/mess', newMessage, {
-        headers: { 
-          'Authorization': `Bearer ${userToken}`,
-          'Content-Type': 'application/json'
-        },
-      });
-  
-      if (response.status === 200) {
-        setMessages(prev => [
-          {
-            ...response.data,
-            id: response.data.id || Date.now().toString(),
-            senderUserId: userData.email
-          },
-          ...prev.filter(msg => msg.id !== tempMessage.id)
-        ]);
-      }
-    } catch (error) {
-      console.error('Error sending text:', error);
-      setMessages(prev => prev.filter(msg => !msg.isTemp));
-      Alert.alert(
-        "Message Failed",
-        error.response?.data?.message || "Failed to send message"
-      );
-    } finally {
-      setIsSending(false);
-    }
-  }, [userToken, userData]);
-  
-
-  const handleSendAudio = useCallback(async ({ content }) => {
-    if (!userData) return;
-    
-    setIsSending(true);
-    try {
-      let braceletId = "0";
-      const braceletResponse = await api.get(`/req/users/bracelet?email=${userData.email}`, {
-        headers: { 'Authorization': `Bearer ${userToken}` }
-      });
-      braceletId = braceletResponse.data?.braceletId || "0";
-      console.log('Fetched braceletId:', braceletId);
-
-      // Create temporary message for instant UI update
-      const tempMessage = {
-        id: Date.now().toString(),
-        vocal: content,
-        type: 'VOCAL',
-        isTextMessage: false,
-        senderUserId: userData.email,
-        createdAt: new Date().toISOString(),
-        isTemp: true
-      };
-      
-      setMessages(prev => [tempMessage, ...prev]);
-
-      const newMessage = {
-        text: '',
-        vocal: content,
-        anomalyDetected: false,
-        type: 'VOCAL',
-        isTextMessage: false,
-        braceletId: Number(braceletId),
-        senderUserId: userData.id,
-      };
-
-      const response = await api.post('/messages/mess', newMessage, {
-        headers: { 'Authorization': `Bearer ${userToken}` },
-      });
-
-      if (response.status === 200) {
-        // Replace temp message with server response
-        setMessages(prev => [
-          {
-            ...response.data,
-            id: response.data.id || Date.now().toString(),
-            senderUserId: userData.email
-          },
-          ...prev.filter(msg => msg.id !== tempMessage.id)
-        ]);
-      }
-    } catch (error) {
-      console.error('Error sending audio:', error.response?.data || error.message);
-      // Remove temp message if error occurs
-      setMessages(prev => prev.filter(msg => !msg.isTemp));
-    } finally {
-      setIsSending(false);
-    }
-  }, [userToken, userData]);
-
-  const renderMessage = useCallback(({ item }) => (
-    <ChatMessage message={item} userData={userData} />
-  ), [userData]);
 
   useEffect(() => {
-    if (!isLoading && !userToken) {
-      router.replace('/login');
-    }
-  }, [isLoading, userToken]);
+    fetchMessages();
+  }, []);
 
-  if (isLoading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <Text style={styles.loadingText}>Loading...</Text>
-      </SafeAreaView>
-    );
-  }
+  const fetchMessages = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/api/messages/1`);
+      if (Array.isArray(res.data)) {
+        setMessages(res.data.reverse());
+      } else {
+        console.warn("Expected an array but got:", res.data);
+        setMessages([]);
+      }
+    } catch (err) {
+      console.error("Error fetching messages:", err);
+    }
+  };
+
+  const sendText = async () => {
+    if (!text.trim()) return;
+    setIsSending(true);
+    try {
+      await axios.post(`${API_URL}/api/messages/text`, {
+        sender: { id: 1 },
+        receiver: { id: 2 },
+        content: text,
+        type: "TEXT",
+      });
+      setText("");
+      fetchMessages();
+    } catch (err) {
+      console.error("Error sending text:", err);
+      Alert.alert("Error", "Failed to send message");
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (permission.status !== "granted") {
+        Alert.alert("Permission to access microphone denied");
+        return;
+      }
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      setRecording(recording);
+    } catch (err) {
+      console.error("Failed to start recording", err);
+    }
+  };
+
+  const stopRecording = async () => {
+    try {
+      if (!recording) return;
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+
+      const formData = new FormData();
+      formData.append("file", {
+        uri,
+        name: "audio.m4a",
+        type: "audio/m4a",
+      });
+      formData.append("senderId", "1");
+      formData.append("receiverId", "2");
+
+      await axios.post(`${API_URL}/api/messages/audio`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      setRecording(null);
+      fetchMessages();
+    } catch (err) {
+      console.error("Failed to stop/upload recording", err);
+    }
+  };
+
+  const playAudio = async (url) => {
+    try {
+      const { sound } = await Audio.Sound.createAsync({
+        uri: `${API_URL}${url}`,
+      });
+      await sound.playAsync();
+    } catch (err) {
+      console.error("Error playing audio", err);
+    }
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Chat with Us!</Text>
-      </View>
-      
+    <SafeAreaView style={styles.safeContainer} edges={["top", "bottom"]}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.flex}
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={90}
       >
+        <Text style={styles.header}>Chat with Us!</Text>
+
         <FlatList
           data={messages}
           keyExtractor={(item) => item.id.toString()}
-          renderItem={renderMessage}
-          contentContainerStyle={styles.messagesList}
-          inverted
-          showsVerticalScrollIndicator={false}
-          maintainVisibleContentPosition={{
-            minIndexForVisible: 0
+          renderItem={({ item }) => {
+            const isUser = item.sender.id === 1;
+            return item.type === "TEXT" ? (
+              <View
+                style={[
+                  styles.messageBubble,
+                  isUser ? styles.userMessage : styles.otherMessage,
+                ]}
+              >
+                <Text style={styles.messageText}>{item.content}</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={() => playAudio(item.audioUrl)}
+                style={[
+                  styles.messageBubble,
+                  isUser ? styles.userMessage : styles.otherMessage,
+                ]}
+              >
+                <FontAwesome name="play-circle" size={30} color="#007BFF" />
+              </TouchableOpacity>
+            );
           }}
+          contentContainerStyle={styles.messageList}
+          inverted
         />
-        <MessageInput 
-          onSendText={handleSendText} 
-          onSendAudio={handleSendAudio} 
-          isSending={isSending}
-        />
+
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="Type your message"
+            value={text}
+            onChangeText={setText}
+          />
+
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              onPress={sendText}
+              disabled={isSending}
+              style={styles.sendButton}
+            >
+              <FontAwesome name="send" size={22} color="white" />
+            </TouchableOpacity>
+
+            {recording ? (
+              <TouchableOpacity onPress={stopRecording} style={styles.recordButton}>
+                <FontAwesome name="stop-circle" size={30} color="#FF0000" />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={startRecording} style={styles.recordButton}>
+                <FontAwesome name="microphone" size={30} color="#007BFF" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
-};
+}
 
 const styles = StyleSheet.create({
+  safeContainer: {
+    flex: 1,
+    backgroundColor: "#fff",
+    marginTop:10,
+    marginBottom:0,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  flex: {
-    flex: 1,
+    paddingHorizontal: 10,
+    
   },
   header: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ECECEC',
-    alignItems: 'center',
+    fontSize: 22,
+    fontWeight: "bold",
+    marginVertical: 10,
+    textAlign: "center",
+    color: "#007BFF",
   },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#007BFF',
-  },
-  messagesList: {
+  messageList: {
+    paddingBottom: 20,
     paddingHorizontal: 10,
-    paddingTop: 10,
   },
-  loadingText: {
-    fontSize: 18,
-    textAlign: 'center',
-    marginTop: 20,
+  messageBubble: {
+    padding: 10,
+    borderRadius: 15,
+    marginVertical: 5,
+    maxWidth: "80%",
+  },
+  userMessage: {
+    backgroundColor: "#DCF8C6",
+    alignSelf: "flex-end",
+  },
+  otherMessage: {
+    backgroundColor: "#f1f1f1",
+    alignSelf: "flex-start",
+  },
+  messageText: {
+    fontSize: 16,
+  },
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+    marginBottom:-30,
+  },
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    padding: 10,
+    marginRight: 10,
+    borderRadius: 25,
+    fontSize: 16,
+  },
+  buttonContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  sendButton: {
+    backgroundColor: "#007BFF",
+    padding: 10,
+    borderRadius: 30,
+    marginLeft: 5,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  recordButton: {
+    padding: 10,
+    marginLeft: 5,
   },
 });
-
-export default ChatPage;
