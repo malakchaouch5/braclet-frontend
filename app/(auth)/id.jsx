@@ -23,7 +23,7 @@ const BraceletSearchPage = () => {
     setSuccessMessage(''); // Reset success message before making the request
 
     try {
-      const response = await axios.put(`http://10.0.2.2:8080/req/addBraceletId`, {
+      const response = await axios.put(`http://192.168.1.12:8080/req/addBraceletId`, {
         username:username,
         braceletid: braceletid
       });

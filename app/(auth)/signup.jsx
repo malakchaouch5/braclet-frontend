@@ -16,7 +16,7 @@ export default function SignUp() {
   const [secureText, setSecureText] = useState(true);
   const [userId, setUserId] = useState(null);
 
-  const API_URL = 'http://10.0.2.2:8080/req';
+  const API_URL = 'http://192.168.1.12:8080/req';
 
   const handleSignUp = async () => {
   if (!username || !email || !password || !number) {
